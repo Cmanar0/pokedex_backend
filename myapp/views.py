@@ -45,38 +45,50 @@ def check_auth(request):
     else:
         return JsonResponse({'authenticated': False}, status=401)
 
-def fetch_pokemon_sprite(pokemon_url):
-    """Fetch sprite for a single Pokemon"""
+def fetch_pokemon_details(pokemon_url):
+    """Fetch sprite, types, and abilities for a single Pokemon"""
     try:
         response = requests.get(pokemon_url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            return data.get('sprites', {}).get('front_default')
+            return {
+                'sprite': data.get('sprites', {}).get('front_default'),
+                'types': [t['type']['name'] for t in data.get('types', [])],
+                'abilities': [a['ability']['name'] for a in data.get('abilities', [])],
+                'height': data.get('height'),  # in decimeters
+                'weight': data.get('weight'),  # in hectograms
+            }
     except:
         pass
-    return None
+    return {
+        'sprite': None,
+        'types': [],
+        'abilities': [],
+        'height': None,
+        'weight': None,
+    }
 
-def fetch_pokemon_sprite_cached(pokemon_url):
-    """Fetch sprite with caching"""
-    cache_key = f"sprite_{hashlib.md5(pokemon_url.encode()).hexdigest()}"
-    cached_sprite = cache.get(cache_key)
+def fetch_pokemon_details_cached(pokemon_url):
+    """Fetch Pokemon details with caching"""
+    cache_key = f"pokemon_{hashlib.md5(pokemon_url.encode()).hexdigest()}"
+    cached_details = cache.get(cache_key)
     
-    if cached_sprite is not None:
-        return cached_sprite
+    if cached_details is not None:
+        return cached_details
     
-    sprite = fetch_pokemon_sprite(pokemon_url)
+    details = fetch_pokemon_details(pokemon_url)
     # Cache for 1 hour
-    cache.set(cache_key, sprite, 3600)
-    return sprite
+    cache.set(cache_key, details, 3600)
+    return details
 
 @api_view(['GET'])
 def get_pokemon_list(request):
-    skip_sprites = request.GET.get('skip_sprites', 'false').lower() == 'true'
+    skip_details = request.GET.get('skip_details', 'false').lower() == 'true'
     page = int(request.GET.get('page', 1))
     search = request.GET.get('search', '').lower()
     pokemon_type = request.GET.get('type')
     ability = request.GET.get('ability')
-    limit = 10
+    limit = 9
     offset = (page - 1) * limit
     
     # Handle type filtering
@@ -115,35 +127,41 @@ def get_pokemon_list(request):
             if pokemon_type:
                 previous_url += f"&type={pokemon_type}"
         
-        if skip_sprites:
-            # Don't fetch sprites, just return basic data
+        if skip_details:
+            # Don't fetch details, just return basic data
             results = []
             for pokemon in paginated_pokemon:
                 results.append({
                     'name': pokemon['name'],
-                    'url': pokemon['url'],
-                    'sprite': None
+                    'sprite': None,
+                    'types': [],
+                    'abilities': [],
+                    'height': None,
+                    'weight': None,
                 })
         else:
-            # Fetch sprites concurrently
+            # Fetch details concurrently
             pokemon_urls = [p['url'] for p in paginated_pokemon]
-            sprites = []
             
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_index = {executor.submit(fetch_pokemon_sprite_cached, url): i for i, url in enumerate(pokemon_urls)}
-                sprites = [None] * len(pokemon_urls)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=9) as executor:
+                future_to_index = {executor.submit(fetch_pokemon_details_cached, url): i for i, url in enumerate(pokemon_urls)}
+                details_list = [None] * len(pokemon_urls)
                 
                 for future in concurrent.futures.as_completed(future_to_index):
                     index = future_to_index[future]
-                    sprites[index] = future.result()
+                    details_list[index] = future.result()
             
-            # Combine data with sprites
+            # Combine data with details
             results = []
             for i, pokemon_data in enumerate(paginated_pokemon):
+                details = details_list[i] or {}
                 results.append({
                     'name': pokemon_data['name'],
-                    'url': pokemon_data['url'],
-                    'sprite': sprites[i]
+                    'sprite': details.get('sprite'),
+                    'types': details.get('types', []),
+                    'abilities': details.get('abilities', []),
+                    'height': details.get('height'),
+                    'weight': details.get('weight'),
                 })
         
         return JsonResponse({
@@ -189,35 +207,41 @@ def get_pokemon_list(request):
             if ability:
                 previous_url += f"&ability={ability}"
         
-        if skip_sprites:
-            # Don't fetch sprites, just return basic data
+        if skip_details:
+            # Don't fetch details, just return basic data
             results = []
             for pokemon in paginated_pokemon:
                 results.append({
                     'name': pokemon['name'],
-                    'url': pokemon['url'],
-                    'sprite': None
+                    'sprite': None,
+                    'types': [],
+                    'abilities': [],
+                    'height': None,
+                    'weight': None,
                 })
         else:
-            # Fetch sprites concurrently
+            # Fetch details concurrently
             pokemon_urls = [p['url'] for p in paginated_pokemon]
-            sprites = []
             
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_index = {executor.submit(fetch_pokemon_sprite_cached, url): i for i, url in enumerate(pokemon_urls)}
-                sprites = [None] * len(pokemon_urls)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=9) as executor:
+                future_to_index = {executor.submit(fetch_pokemon_details_cached, url): i for i, url in enumerate(pokemon_urls)}
+                details_list = [None] * len(pokemon_urls)
                 
                 for future in concurrent.futures.as_completed(future_to_index):
                     index = future_to_index[future]
-                    sprites[index] = future.result()
+                    details_list[index] = future.result()
             
-            # Combine data with sprites
+            # Combine data with details
             results = []
             for i, pokemon_data in enumerate(paginated_pokemon):
+                details = details_list[i] or {}
                 results.append({
                     'name': pokemon_data['name'],
-                    'url': pokemon_data['url'],
-                    'sprite': sprites[i]
+                    'sprite': details.get('sprite'),
+                    'types': details.get('types', []),
+                    'abilities': details.get('abilities', []),
+                    'height': details.get('height'),
+                    'weight': details.get('weight'),
                 })
         
         return JsonResponse({
@@ -242,35 +266,41 @@ def get_pokemon_list(request):
         if search:
             pokemon_list = [p for p in pokemon_list if search in p['name'].lower()]
         
-        if skip_sprites:
-            # Don't fetch sprites, just return basic data
+        if skip_details:
+            # Don't fetch details, just return basic data
             results = []
             for pokemon in pokemon_list:
                 results.append({
                     'name': pokemon['name'],
-                    'url': pokemon['url'],
-                    'sprite': None
+                    'sprite': None,
+                    'types': [],
+                    'abilities': [],
+                    'height': None,
+                    'weight': None,
                 })
         else:
-            # Fetch sprites concurrently
+            # Fetch details concurrently
             pokemon_urls = [p['url'] for p in pokemon_list]
-            sprites = []
             
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_index = {executor.submit(fetch_pokemon_sprite_cached, url): i for i, url in enumerate(pokemon_urls)}
-                sprites = [None] * len(pokemon_urls)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=9) as executor:
+                future_to_index = {executor.submit(fetch_pokemon_details_cached, url): i for i, url in enumerate(pokemon_urls)}
+                details_list = [None] * len(pokemon_urls)
                 
                 for future in concurrent.futures.as_completed(future_to_index):
                     index = future_to_index[future]
-                    sprites[index] = future.result()
+                    details_list[index] = future.result()
             
-            # Combine data with sprites
+            # Combine data with details
             results = []
             for i, pokemon in enumerate(pokemon_list):
+                details = details_list[i] or {}
                 results.append({
                     'name': pokemon['name'],
-                    'url': pokemon['url'],
-                    'sprite': sprites[i]
+                    'sprite': details.get('sprite'),
+                    'types': details.get('types', []),
+                    'abilities': details.get('abilities', []),
+                    'height': details.get('height'),
+                    'weight': details.get('weight'),
                 })
         
         # Adjust pagination URLs to include search parameter
