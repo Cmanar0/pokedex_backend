@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import login_view, logout_view, check_auth, get_pokemon_list
+from .views import login_view, logout_view, check_auth, pokemon_list
 from . import views
 
 urlpatterns = [
@@ -7,5 +7,5 @@ urlpatterns = [
     path('auth/logout/', logout_view, name='logout'),
     path('auth/me/', check_auth, name='check-auth'),
     path('csrf/', views.get_csrf_token, name='csrf-token'),
-    path('pokemon/', get_pokemon_list, name='pokemon-list'),
+    path('pokemon/', pokemon_list, name='pokemon-list'),
 ]
