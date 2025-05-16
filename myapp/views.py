@@ -13,7 +13,9 @@ from .api_integrations.pokemon.pokemon_api import (
     fetch_pokemon_list,
     fetch_multiple_pokemon_details,
     fetch_pokemon_by_type,
-    fetch_pokemon_by_ability
+    fetch_pokemon_by_ability,
+    fetch_pokemon_detail,
+    POKEMON_URL
 )
 from .models import UserProfile
 from .decorators import handle_api_errors, require_authentication, validate_with_serializer, paginate_response
@@ -182,3 +184,20 @@ def user_profile_view(request):
             }
         }
     })
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@handle_api_errors
+def pokemon_detail(request, name):
+    """Fetch detailed information for a specific Pokémon."""
+    url = f"{POKEMON_URL}/{name.lower()}"
+    result = fetch_pokemon_detail(url)
+    
+    if not result or not result.get('sprite'):
+        return Response(
+            {'error': f'Pokémon {name} not found.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    result['name'] = name
+    return Response(result)
