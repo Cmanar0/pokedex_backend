@@ -3,6 +3,7 @@ import concurrent.futures
 from django.core.cache import cache
 import hashlib
 from typing import List, Dict, Optional
+from .pokemon_serializer import PokemonAPISerializer
 
 BASE_URL = "https://pokeapi.co/api/v2/pokemon"
 CACHE_TIMEOUT = 3600
@@ -42,22 +43,8 @@ def fetch_pokemon_list(offset: int = 0, limit: int = 9) -> Optional[Dict]:
 
 def fetch_pokemon_detail(pokemon_url: str) -> Dict:
     data = fetch_with_cache(pokemon_url)
-    if not data:
-        return {
-            'sprite': None,
-            'types': [],
-            'abilities': [],
-            'height': None,
-            'weight': None,
-        }
-
-    return {
-        'sprite': data.get('sprites', {}).get('front_default'),
-        'types': [t['type']['name'] for t in data.get('types', [])],
-        'abilities': [a['ability']['name'] for a in data.get('abilities', [])],
-        'height': data.get('height'),
-        'weight': data.get('weight'),
-    }
+    serializer = PokemonAPISerializer(data=data)
+    return serializer.to_internal_value(data)
 
 
 def fetch_multiple_pokemon_details(pokemon_urls: List[str]) -> List[Dict]:

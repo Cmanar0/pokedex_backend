@@ -1,0 +1,41 @@
+"""
+Serializers for Pokemon API data transformation.
+
+These serializers handle the transformation of raw data from the PokeAPI
+into our application's expected format.
+"""
+
+from rest_framework import serializers
+
+
+class PokemonAPISerializer(serializers.Serializer):
+    """
+    Serializer for raw Pokemon data from the PokeAPI.
+    This ensures the incoming data matches our expected structure.
+    """
+    sprites = serializers.DictField(required=False)
+    types = serializers.ListField(required=False)
+    abilities = serializers.ListField(required=False)
+    height = serializers.IntegerField(required=False)
+    weight = serializers.IntegerField(required=False)
+
+    def to_internal_value(self, data):
+        """
+        Transform the raw API data into our expected format.
+        """
+        if not data:
+            return {
+                'sprite': None,
+                'types': [],
+                'abilities': [],
+                'height': None,
+                'weight': None,
+            }
+
+        return {
+            'sprite': data.get('sprites', {}).get('front_default'),
+            'types': [t['type']['name'] for t in data.get('types', [])],
+            'abilities': [a['ability']['name'] for a in data.get('abilities', [])],
+            'height': data.get('height'),
+            'weight': data.get('weight'),
+        } 

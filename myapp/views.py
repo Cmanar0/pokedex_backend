@@ -1,11 +1,15 @@
+from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth import authenticate, login, logout
-from .serializers import PokemonListResponseSerializer, UserSerializer, LoginSerializer, RegisterSerializer
-from .pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
+from .my_api_serializers.user.user_read import UserReadSerializer, UserProfileReadSerializer
+from .my_api_serializers.user.user_write import UserRegisterWriteSerializer, UserLoginWriteSerializer
+from .api_integrations.pokemon.pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,17 +18,22 @@ logger = logging.getLogger(__name__)
 @permission_classes([AllowAny])
 def login_view(request):
     try:
-        serializer = LoginSerializer(data=request.data)
+        serializer = UserLoginWriteSerializer(data=request.data)
         if serializer.is_valid():
             username = serializer.validated_data['username']
             password = serializer.validated_data['password']
             user = authenticate(request, username=username, password=password)
             if user is not None:
                 login(request, user)
-                return Response({
+                # Create flat response structure
+                response_data = {
                     'message': 'Logged in successfully.',
-                    'user': UserSerializer(user).data
-                })
+                    'user': {
+                        **UserReadSerializer(user).data,
+                        'profile': UserProfileReadSerializer(user.profile).data
+                    }
+                }
+                return Response(response_data)
             return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -34,15 +43,19 @@ def login_view(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
-    serializer = RegisterSerializer(data=request.data)
+    serializer = UserRegisterWriteSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        # Log the user in after successful registration
         login(request, user)
-        return Response({
+        # Create flat response structure
+        response_data = {
             'message': 'User registered successfully.',
-            'user': UserSerializer(user).data
-        }, status=status.HTTP_201_CREATED)
+            'user': {
+                **UserReadSerializer(user).data,
+                'profile': UserProfileReadSerializer(user.profile).data
+            }
+        }
+        return Response(response_data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
@@ -59,10 +72,15 @@ def get_csrf_token(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_auth(request):
-    return Response({
+    # Create flat response structure
+    response_data = {
         'authenticated': True,
-        'user': UserSerializer(request.user).data
-    })
+        'user': {
+            **UserReadSerializer(request.user).data,
+            'profile': UserProfileReadSerializer(request.user.profile).data
+        }
+    }
+    return Response(response_data)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -111,5 +129,4 @@ def pokemon_list(request):
         'results': results,
     }
 
-    serializer = PokemonListResponseSerializer(response_data)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(response_data, status=status.HTTP_200_OK)
