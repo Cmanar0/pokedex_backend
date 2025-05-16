@@ -144,3 +144,15 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.AllowAny',
     ],
 }
+
+# Cache settings
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}
+
+# Cache timeouts (in seconds)
+CACHE_TTL = 3600  # 1 hour
+DETAIL_CACHE_TTL = 86400  # 24 hours
