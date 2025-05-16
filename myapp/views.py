@@ -10,88 +10,78 @@ from django.contrib.auth import authenticate, login, logout
 from .my_api_serializers.user.user_read import UserReadSerializer, UserProfileReadSerializer
 from .my_api_serializers.user.user_write import UserRegisterWriteSerializer, UserLoginWriteSerializer
 from .api_integrations.pokemon.pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
+from .models import UserProfile
+from .decorators import handle_api_errors, require_authentication, validate_with_serializer, paginate_response
 import logging
 
 logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@handle_api_errors
+@validate_with_serializer(UserLoginWriteSerializer)
 def login_view(request):
-    try:
-        serializer = UserLoginWriteSerializer(data=request.data)
-        if serializer.is_valid():
-            username = serializer.validated_data['username']
-            password = serializer.validated_data['password']
-            user = authenticate(request, username=username, password=password)
-            if user is not None:
-                login(request, user)
-                # Create flat response structure
-                response_data = {
-                    'message': 'Logged in successfully.',
-                    'user': {
-                        **UserReadSerializer(user).data,
-                        'profile': UserProfileReadSerializer(user.profile).data
-                    }
-                }
-                return Response(response_data)
-            return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        logger.error(f"Login error: {str(e)}")
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def register_view(request):
-    serializer = UserRegisterWriteSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
+    username = request.validated_data['username']
+    password = request.validated_data['password']
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
         login(request, user)
-        # Create flat response structure
-        response_data = {
-            'message': 'User registered successfully.',
+        return Response({
+            'message': 'Logged in successfully.',
             'user': {
                 **UserReadSerializer(user).data,
                 'profile': UserProfileReadSerializer(user.profile).data
             }
+        })
+    return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@handle_api_errors
+@validate_with_serializer(UserRegisterWriteSerializer)
+def register_view(request):
+    user = request.validated_data.save()
+    login(request, user)
+    return Response({
+        'message': 'User registered successfully.',
+        'user': {
+            **UserReadSerializer(user).data,
+            'profile': UserProfileReadSerializer(user.profile).data
         }
-        return Response(response_data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    }, status=status.HTTP_201_CREATED)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@handle_api_errors
 def logout_view(request):
     logout(request)
     return Response({'message': 'Logged out successfully.'})
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@handle_api_errors
 def get_csrf_token(request):
     return Response({"message": "CSRF cookie set"})
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@handle_api_errors
+@require_authentication
 def check_auth(request):
-    # Create flat response structure
-    response_data = {
-        'authenticated': True,
-        'user': {
-            **UserReadSerializer(request.user).data,
-            'profile': UserProfileReadSerializer(request.user.profile).data
-        }
-    }
-    return Response(response_data)
+    return Response({'authenticated': True})
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@handle_api_errors
+@paginate_response(limit=9)
 def pokemon_list(request):
-    page = max(1, int(request.GET.get('page', 1))) if request.GET.get('page', '').isdigit() else 1
     search = request.GET.get('search', '').strip()
     skip_details = request.GET.get('skip_details', 'false').lower() == 'true'
-    limit = 9
-    offset = (page - 1) * limit
-
-    base_data = fetch_pokemon_list(offset, limit)
+    
+    base_data = fetch_pokemon_list(
+        request.pagination['offset'],
+        request.pagination['limit']
+    )
     if not base_data:
         return Response({'error': 'Failed to fetch Pokémon list.'}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -122,11 +112,36 @@ def pokemon_list(request):
             } for i in range(len(raw_list))
         ]
 
-    response_data = {
+    return Response({
         'count': base_data.get('count', len(results)),
         'next': base_data.get('next'),
         'previous': base_data.get('previous'),
         'results': results,
-    }
+    })
 
-    return Response(response_data, status=status.HTTP_200_OK)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@handle_api_errors
+@require_authentication
+def user_profile_view(request):
+    """
+    Get the authenticated user's profile with nested user data.
+    Each field is explicitly defined for better clarity and control.
+    """
+    user_data = UserReadSerializer(request.user).data
+    profile_data = UserProfileReadSerializer(request.user.profile).data
+
+    return Response({
+        'user': {
+            'id': user_data['id'],
+            'username': user_data['username'],
+            'email': user_data['email'],
+            'first_name': user_data['first_name'],
+            'last_name': user_data['last_name'],
+            'profile': {
+                'favorite_pokemon': profile_data['favorite_pokemon'],
+                'created_at': profile_data['created_at'],
+                'updated_at': profile_data['updated_at']
+            }
+        }
+    })
