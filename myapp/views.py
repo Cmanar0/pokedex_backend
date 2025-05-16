@@ -1,31 +1,35 @@
-from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth import authenticate, login, logout
 from .serializers import PokemonListResponseSerializer, UserSerializer, LoginSerializer, RegisterSerializer
 from .pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
+import logging
+
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
-    serializer = LoginSerializer(data=request.data)
-    if serializer.is_valid():
-        username = serializer.validated_data['username']
-        password = serializer.validated_data['password']
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return Response({
-                'message': 'Logged in successfully.',
-                'user': UserSerializer(user).data
-            })
-        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        serializer = LoginSerializer(data=request.data)
+        if serializer.is_valid():
+            username = serializer.validated_data['username']
+            password = serializer.validated_data['password']
+            user = authenticate(request, username=username, password=password)
+            if user is not None:
+                login(request, user)
+                return Response({
+                    'message': 'Logged in successfully.',
+                    'user': UserSerializer(user).data
+                })
+            return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
