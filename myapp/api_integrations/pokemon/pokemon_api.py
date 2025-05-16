@@ -3,6 +3,7 @@ import concurrent.futures
 from typing import List, Dict, Optional
 from django.core.cache import cache
 from .pokemon_serializer import PokemonAPISerializer
+import logging
 
 BASE_URL = "https://pokeapi.co/api/v2"
 POKEMON_URL = f"{BASE_URL}/pokemon"
@@ -14,6 +15,8 @@ MAX_CONCURRENT_REQUESTS = 9
 # Cache timeouts (in seconds)
 CACHE_TIMEOUT = 3600  # 1 hour for base list
 DETAIL_CACHE_TIMEOUT = 86400  # 24 hours for individual Pokémon details
+
+logger = logging.getLogger(__name__)
 
 
 def _make_http_request(url: str) -> Optional[Dict]:
@@ -83,27 +86,57 @@ def fetch_pokemon_by_ability(ability_name: str) -> Optional[List[str]]:
 
 
 def fetch_pokemon_detail(pokemon_url: str) -> Dict:
-    """Fetch Pokémon details with caching."""
+    """Fetch detailed information for a specific Pokémon."""
+    logger.info(f"Fetching pokemon detail from URL: {pokemon_url}")
+    
+    # Check cache first
     cache_key = f"pokemon_detail_{pokemon_url}"
     cached_data = cache.get(cache_key)
-    
     if cached_data:
+        logger.info(f"Using cached data for {pokemon_url}")
         return cached_data
-
+    
+    # If not in cache, fetch from API
     data = _make_http_request(pokemon_url)
     if not data:
+        logger.error(f"Failed to fetch data for URL: {pokemon_url}")
         return {
             'sprite': None,
             'types': [],
             'abilities': [],
             'height': None,
-            'weight': None
+            'weight': None,
         }
 
-    serializer = PokemonAPISerializer(data=data)
-    result = serializer.to_internal_value(data)
-    cache.set(cache_key, result, DETAIL_CACHE_TIMEOUT)
-    return result
+    logger.info(f"Raw API response for {pokemon_url}: {data}")
+    
+    try:
+        serializer = PokemonAPISerializer(data=data)
+        if not serializer.is_valid():
+            logger.error(f"Serializer validation failed for {pokemon_url}: {serializer.errors}")
+            return {
+                'sprite': None,
+                'types': [],
+                'abilities': [],
+                'height': None,
+                'weight': None,
+            }
+        
+        result = serializer.to_internal_value(data)
+        logger.info(f"Processed pokemon data for {pokemon_url}: {result}")
+        
+        # Cache the result
+        cache.set(cache_key, result, DETAIL_CACHE_TIMEOUT)
+        return result
+    except Exception as e:
+        logger.error(f"Error processing pokemon data for {pokemon_url}: {str(e)}")
+        return {
+            'sprite': None,
+            'types': [],
+            'abilities': [],
+            'height': None,
+            'weight': None,
+        }
 
 
 def fetch_multiple_pokemon_details(pokemon_urls: List[str]) -> List[Dict]:

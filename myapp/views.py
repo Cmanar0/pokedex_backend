@@ -20,6 +20,7 @@ from .api_integrations.pokemon.pokemon_api import (
 from .models import UserProfile
 from .decorators import handle_api_errors, require_authentication, validate_with_serializer, paginate_response
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -229,3 +230,64 @@ def update_favorite_pokemon(request):
         'message': f'Pokemon {pokemon_name} {action} favorites.',
         'favorite_pokemon': profile.favorite_pokemon
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@handle_api_errors
+@require_authentication
+def favorite_pokemon_list(request):
+    """Fetch detailed information for favorite Pokémon."""
+    try:
+        # Get and parse favorite pokemon list from request parameters
+        favorite_pokemon_str = request.GET.get('favorite_pokemon', '[]')
+        logger.info(f"Received favorite_pokemon_str: {favorite_pokemon_str}")
+        
+        try:
+            favorite_pokemon = json.loads(favorite_pokemon_str)
+            logger.info(f"Parsed favorite_pokemon: {favorite_pokemon}")
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
+            return Response({
+                'error': 'Invalid favorite Pokémon list format'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not favorite_pokemon:
+            logger.info("No favorite pokemon found")
+            return Response({
+                'count': 0,
+                'results': []
+            })
+
+        # Create URLs for each favorite pokemon
+        urls = []
+        for name in favorite_pokemon:
+            formatted_name = name.lower().strip()
+            url = f"{POKEMON_URL}/{formatted_name}"
+            urls.append(url)
+            logger.info(f"Created URL for {name}: {url}")
+        
+        # Fetch details for all favorite pokemon
+        logger.info(f"Fetching details for {len(urls)} pokemon")
+        details = fetch_multiple_pokemon_details(urls)
+        logger.info(f"Fetched details: {details}")
+        
+        # Combine the data
+        results = []
+        for i, detail in enumerate(details):
+            if detail and detail.get('sprite') is not None:
+                results.append({
+                    'name': favorite_pokemon[i],
+                    **detail
+                })
+                logger.info(f"Added result for {favorite_pokemon[i]}")
+        
+        logger.info(f"Returning {len(results)} results")
+        return Response({
+            'count': len(results),
+            'results': results
+        })
+    except Exception as e:
+        logger.error(f"Unexpected error in favorite_pokemon_list: {str(e)}")
+        return Response({
+            'error': f'An unexpected error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
