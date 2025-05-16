@@ -201,3 +201,31 @@ def pokemon_detail(request, name):
     
     result['name'] = name
     return Response(result)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@handle_api_errors
+@require_authentication
+def update_favorite_pokemon(request):
+    """Add or remove a Pokémon from the user's favorites."""
+    pokemon_name = request.data.get('pokemon_name')
+    if not pokemon_name:
+        return Response(
+            {'error': 'Pokemon name is required.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    profile = request.user.profile
+    if pokemon_name in profile.favorite_pokemon:
+        profile.favorite_pokemon.remove(pokemon_name)
+        action = 'removed from'
+    else:
+        profile.favorite_pokemon.append(pokemon_name)
+        action = 'added to'
+    
+    profile.save()
+
+    return Response({
+        'message': f'Pokemon {pokemon_name} {action} favorites.',
+        'favorite_pokemon': profile.favorite_pokemon
+    })
