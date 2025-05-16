@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth import authenticate, login, logout
-from .serializers import PokemonListResponseSerializer, UserSerializer, LoginSerializer
+from .serializers import PokemonListResponseSerializer, UserSerializer, LoginSerializer, RegisterSerializer
 from .pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
 
 @api_view(['POST'])
@@ -25,6 +25,20 @@ def login_view(request):
                 'user': UserSerializer(user).data
             })
         return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_view(request):
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        # Log the user in after successful registration
+        login(request, user)
+        return Response({
+            'message': 'User registered successfully.',
+            'user': UserSerializer(user).data
+        }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
