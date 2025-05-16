@@ -1,12 +1,12 @@
 import requests
 import concurrent.futures
-from django.core.cache import cache
-import hashlib
 from typing import List, Dict, Optional
 from .pokemon_serializer import PokemonAPISerializer
 
-BASE_URL = "https://pokeapi.co/api/v2/pokemon"
-CACHE_TIMEOUT = 3600
+BASE_URL = "https://pokeapi.co/api/v2"
+POKEMON_URL = f"{BASE_URL}/pokemon"
+TYPE_URL = f"{BASE_URL}/type"
+ABILITY_URL = f"{BASE_URL}/ability"
 REQUEST_TIMEOUT = 5
 MAX_CONCURRENT_REQUESTS = 9
 
@@ -19,30 +19,35 @@ def _make_http_request(url: str) -> Optional[Dict]:
         return None
 
 
-def _generate_cache_key(url: str) -> str:
-    return f"pokeapi_{hashlib.md5(url.encode()).hexdigest()}"
-
-
-def fetch_with_cache(url: str) -> Optional[Dict]:
-    cache_key = _generate_cache_key(url)
-    cached_data = cache.get(cache_key)
-    if cached_data is not None:
-        return cached_data
-
-    data = _make_http_request(url)
-    if data is not None:
-        cache.set(cache_key, data, CACHE_TIMEOUT)
-
-    return data
-
-
 def fetch_pokemon_list(offset: int = 0, limit: int = 9) -> Optional[Dict]:
-    url = f"{BASE_URL}?offset={offset}&limit={limit}"
-    return fetch_with_cache(url)
+    """
+    Fetch Pokémon list from PokeAPI with pagination.
+    The PokeAPI supports pagination through offset and limit parameters.
+    """
+    url = f"{POKEMON_URL}?offset={offset}&limit={limit}"
+    return _make_http_request(url)
+
+
+def fetch_pokemon_by_type(type_name: str) -> Optional[List[str]]:
+    """Fetch all Pokémon of a specific type."""
+    url = f"{TYPE_URL}/{type_name.lower()}"
+    data = _make_http_request(url)
+    if not data:
+        return None
+    return [p['pokemon']['name'] for p in data.get('pokemon', [])]
+
+
+def fetch_pokemon_by_ability(ability_name: str) -> Optional[List[str]]:
+    """Fetch all Pokémon with a specific ability."""
+    url = f"{ABILITY_URL}/{ability_name.lower()}"
+    data = _make_http_request(url)
+    if not data:
+        return None
+    return [p['pokemon']['name'] for p in data.get('pokemon', [])]
 
 
 def fetch_pokemon_detail(pokemon_url: str) -> Dict:
-    data = fetch_with_cache(pokemon_url)
+    data = _make_http_request(pokemon_url)
     serializer = PokemonAPISerializer(data=data)
     return serializer.to_internal_value(data)
 

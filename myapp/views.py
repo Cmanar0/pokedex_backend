@@ -9,7 +9,12 @@ from rest_framework.authentication import SessionAuthentication
 from django.contrib.auth import authenticate, login, logout
 from .my_api_serializers.user.user_read import UserReadSerializer, UserProfileReadSerializer
 from .my_api_serializers.user.user_write import UserRegisterWriteSerializer, UserLoginWriteSerializer
-from .api_integrations.pokemon.pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
+from .api_integrations.pokemon.pokemon_api import (
+    fetch_pokemon_list,
+    fetch_multiple_pokemon_details,
+    fetch_pokemon_by_type,
+    fetch_pokemon_by_ability
+)
 from .models import UserProfile
 from .decorators import handle_api_errors, require_authentication, validate_with_serializer, paginate_response
 import logging
@@ -40,15 +45,19 @@ def login_view(request):
 @handle_api_errors
 @validate_with_serializer(UserRegisterWriteSerializer)
 def register_view(request):
-    user = request.validated_data.save()
-    login(request, user)
-    return Response({
-        'message': 'User registered successfully.',
-        'user': {
-            **UserReadSerializer(user).data,
-            'profile': UserProfileReadSerializer(user.profile).data
-        }
-    }, status=status.HTTP_201_CREATED)
+    serializer = UserRegisterWriteSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.create(serializer.validated_data)
+        login(request, user)
+        return Response({
+            'message': 'User registered successfully.',
+            'user': {
+                **UserReadSerializer(user).data,
+                'profile': UserProfileReadSerializer(user.profile).data
+            }
+        }, status=status.HTTP_201_CREATED)
+    logger.error(f"Registration validation errors: {serializer.errors}")
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -73,49 +82,77 @@ def check_auth(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @handle_api_errors
-@paginate_response(limit=9)
 def pokemon_list(request):
-    search = request.GET.get('search', '').strip()
-    skip_details = request.GET.get('skip_details', 'false').lower() == 'true'
-    
-    base_data = fetch_pokemon_list(
-        request.pagination['offset'],
-        request.pagination['limit']
-    )
+    # Parse query parameters
+    page = int(request.GET.get('page', 1))
+    search = request.GET.get('search', '').strip().lower()
+    pokemon_type = request.GET.get('type', '').strip().lower()
+    ability = request.GET.get('ability', '').strip().lower()
+    limit = 9
+    offset = (page - 1) * limit
+
+    # Start with full base list
+    base_data = fetch_pokemon_list(offset=0, limit=1000)
     if not base_data:
         return Response({'error': 'Failed to fetch Pokémon list.'}, status=status.HTTP_502_BAD_GATEWAY)
 
-    raw_list = base_data.get('results', [])
+    pokemon_list = base_data['results']
 
     # Apply search filter
     if search:
-        raw_list = [p for p in raw_list if search.lower() in p['name'].lower()]
+        pokemon_list = [p for p in pokemon_list if search in p['name'].lower()]
 
-    if skip_details:
-        results = [
-            {
-                'name': p['name'],
-                'sprite': None,
-                'types': [],
-                'abilities': [],
-                'height': None,
-                'weight': None,
-            } for p in raw_list
-        ]
-    else:
-        urls = [p['url'] for p in raw_list]
-        details = fetch_multiple_pokemon_details(urls)
-        results = [
-            {
-                'name': raw_list[i]['name'],
-                **details[i]
-            } for i in range(len(raw_list))
-        ]
+    # Apply type filter
+    if pokemon_type:
+        type_filtered = fetch_pokemon_by_type(pokemon_type)
+        if type_filtered is None:
+            return Response({'error': 'Failed to fetch Pokémon by type.'}, status=status.HTTP_502_BAD_GATEWAY)
+        pokemon_list = [p for p in pokemon_list if p['name'] in type_filtered]
+
+    # Apply ability filter
+    if ability:
+        ability_filtered = fetch_pokemon_by_ability(ability)
+        if ability_filtered is None:
+            return Response({'error': 'Failed to fetch Pokémon by ability.'}, status=status.HTTP_502_BAD_GATEWAY)
+        pokemon_list = [p for p in pokemon_list if p['name'] in ability_filtered]
+
+    # Calculate total count before pagination
+    total_count = len(pokemon_list)
+
+    # Apply pagination
+    paginated_list = pokemon_list[offset:offset + limit]
+
+    # Fetch details for paginated results
+    urls = [p['url'] for p in paginated_list]
+    details = fetch_multiple_pokemon_details(urls)
+    
+    # Combine the data
+    results = [
+        {
+            'name': paginated_list[i]['name'],
+            **details[i]
+        } for i in range(len(paginated_list))
+    ]
+
+    # Build next/previous URLs
+    next_url = None
+    if offset + limit < total_count:
+        next_url = f"?page={page + 1}&limit={limit}"
+        if search: next_url += f"&search={search}"
+        if pokemon_type: next_url += f"&type={pokemon_type}"
+        if ability: next_url += f"&ability={ability}"
+    
+    previous_url = None
+    if page > 1:
+        previous_url = f"?page={page - 1}&limit={limit}"
+        if search: previous_url += f"&search={search}"
+        if pokemon_type: previous_url += f"&type={pokemon_type}"
+        if ability: previous_url += f"&ability={ability}"
 
     return Response({
-        'count': base_data.get('count', len(results)),
-        'next': base_data.get('next'),
-        'previous': base_data.get('previous'),
+        'count': total_count,
+        'next': next_url,
+        'previous': previous_url,
         'results': results,
     })
 
