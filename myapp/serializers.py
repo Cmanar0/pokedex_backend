@@ -9,6 +9,7 @@ Serializers in DRF handle:
 """
 
 from rest_framework import serializers
+from django.contrib.auth.models import User
 
 
 class PokemonListSerializer(serializers.Serializer):
@@ -44,4 +45,15 @@ class PokemonListResponseSerializer(serializers.Serializer):
     count = serializers.IntegerField()
     next = serializers.URLField(allow_null=True, required=False)
     previous = serializers.URLField(allow_null=True, required=False)
-    results = PokemonListSerializer(many=True) 
+    results = PokemonListSerializer(many=True)
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email')
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True) 

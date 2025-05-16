@@ -1,50 +1,50 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_http_methods, require_POST
-from django.contrib.auth import authenticate, login, logout
+from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
-from .serializers import PokemonListResponseSerializer
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authentication import SessionAuthentication
+from django.contrib.auth import authenticate, login, logout
+from .serializers import PokemonListResponseSerializer, UserSerializer, LoginSerializer
 from .pokemon_api import fetch_pokemon_list, fetch_multiple_pokemon_details
-import json
 
-@require_POST
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def login_view(request):
-    data = json.loads(request.body)
-    username = data.get('username')
-    password = data.get('password')
-    user = authenticate(request, username=username, password=password)
-    if user is not None:
-        login(request, user)
-        return JsonResponse({'message': 'Logged in successfully.'})
-    else:
-        return JsonResponse({'error': 'Invalid credentials.'}, status=400)
+    serializer = LoginSerializer(data=request.data)
+    if serializer.is_valid():
+        username = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return Response({
+                'message': 'Logged in successfully.',
+                'user': UserSerializer(user).data
+            })
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def logout_view(request):
     logout(request)
-    return JsonResponse({'message': 'Logged out successfully.'})
+    return Response({'message': 'Logged out successfully.'})
 
-@ensure_csrf_cookie
-@require_http_methods(["GET"])
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def get_csrf_token(request):
-    return JsonResponse({"message": "CSRF cookie set"})
+    return Response({"message": "CSRF cookie set"})
 
-@require_http_methods(["GET"])
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def check_auth(request):
-    if request.user.is_authenticated:
-        return JsonResponse({
-            'authenticated': True,
-            'user': {
-                'id': request.user.id,
-                'username': request.user.username,
-                'email': request.user.email,
-            }
-        })
-    else:
-        return JsonResponse({'authenticated': False}, status=401)
+    return Response({
+        'authenticated': True,
+        'user': UserSerializer(request.user).data
+    })
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
