@@ -164,3 +164,42 @@ def fetch_multiple_pokemon_details(pokemon_urls: List[str]) -> List[Dict]:
                 }
 
     return results
+
+
+def fetch_pokemon_evolution_chain(name: str) -> Optional[Dict]:
+    """
+    Fetch and return the full evolution chain for the given Pokémon name.
+    This involves two API requests:
+      1. Get the Pokémon species URL from /pokemon/{name}
+      2. Get the evolution_chain URL from the species response
+    """
+    cache_key = f"evolution_chain_{name.lower()}"
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        logger.info(f"Using cached evolution chain for {name}")
+        return cached_data
+
+    species_url = f"{BASE_URL}/pokemon-species/{name.lower()}"
+    species_data = _make_http_request(species_url)
+    if not species_data or 'evolution_chain' not in species_data:
+        logger.error(f"Failed to fetch species data for {name}")
+        return None
+
+    chain_url = species_data['evolution_chain']['url']
+    evolution_data = _make_http_request(chain_url)
+    if not evolution_data or 'chain' not in evolution_data:
+        logger.error(f"Failed to fetch evolution chain for {name}")
+        return None
+
+    def parse_chain(chain_node):
+        species = chain_node['species']['name']
+        evolves_to = chain_node['evolves_to']
+        return {
+            'name': species,
+            'evolves_to': [parse_chain(evo) for evo in evolves_to] if evolves_to else []
+        }
+
+    result = parse_chain(evolution_data['chain'])
+    cache.set(cache_key, result, DETAIL_CACHE_TIMEOUT)
+    logger.info(f"Cached evolution chain for {name}")
+    return result

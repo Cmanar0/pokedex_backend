@@ -15,7 +15,8 @@ from .api_integrations.pokemon.pokemon_api import (
     fetch_pokemon_by_type,
     fetch_pokemon_by_ability,
     fetch_pokemon_detail,
-    POKEMON_URL
+    POKEMON_URL,
+    fetch_pokemon_evolution_chain
 )
 from .models import UserProfile
 from .decorators import handle_api_errors, require_authentication, validate_with_serializer, paginate_response
@@ -291,3 +292,20 @@ def favorite_pokemon_list(request):
         return Response({
             'error': f'An unexpected error occurred: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@handle_api_errors
+def pokemon_evolution_chain_view(request, name):
+    """
+    Return a Pokémon's full evolution chain as a nested structure.
+    Example: bulbasaur → ivysaur → venusaur
+    """
+    chain = fetch_pokemon_evolution_chain(name)
+    if not chain:
+        return Response(
+            {'error': f'Evolution chain for Pokémon "{name}" not found.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    return Response(chain)
