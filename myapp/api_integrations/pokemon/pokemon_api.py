@@ -219,14 +219,23 @@ def fetch_all_types() -> List[Dict[str, Any]]:
         return []
 
 
+import requests
+from typing import List, Dict, Any
+
 def fetch_all_abilities() -> List[Dict[str, Any]]:
-    """Fetch all Pokémon abilities from the PokeAPI."""
-    try:
-        response = requests.get(f"{BASE_URL}/ability")
-        response.raise_for_status()
-        data = response.json()
-        # Only return the names
-        return [{"name": ability_data["name"]} for ability_data in data["results"]]
-    except requests.RequestException as e:
-        print(f"Error fetching abilities: {e}")
-        return []
+    """Fetch all Pokémon abilities from the PokeAPI using pagination."""
+    abilities = []
+    url = f"{BASE_URL}/ability?offset=0&limit=100"
+
+    while url:
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+            abilities.extend(data["results"])
+            url = data.get("next")  # URL to next page
+        except requests.RequestException as e:
+            print(f"Error fetching abilities: {e}")
+            break
+
+    return [{"name": ability["name"]} for ability in abilities]
