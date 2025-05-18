@@ -67,4 +67,12 @@ class EvolutionChainSerializer(serializers.Serializer):
                 'evolves_to': [parse_chain(evo) for evo in evolves_to] if evolves_to else []
             }
 
-        return parse_chain(data) 
+        return parse_chain(data)
+
+
+class TypeSerializer(serializers.Serializer):
+    name = serializers.CharField()
+
+
+class AbilitySerializer(serializers.Serializer):
+    name = serializers.CharField() 

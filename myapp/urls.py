@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     login_view, logout_view, check_auth, pokemon_list,
     register_view, user_profile_view, pokemon_detail, update_favorite_pokemon,
-    favorite_pokemon_list, pokemon_evolution_chain_view
+    favorite_pokemon_list, pokemon_evolution_chain_view, types_list, abilities_list
 )
 from . import views
 
@@ -18,4 +18,6 @@ urlpatterns = [
     path('pokemon/', pokemon_list, name='pokemon-list'),
     path('profile/', user_profile_view, name='user-profile'),
     path('user/favorite-pokemon/', update_favorite_pokemon, name='update_favorite_pokemon'),
+    path('types/', types_list, name='types-list'),
+    path('abilities/', abilities_list, name='abilities-list'),
 ]

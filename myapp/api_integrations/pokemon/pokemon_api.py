@@ -1,8 +1,8 @@
 import requests
 import concurrent.futures
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from django.core.cache import cache
-from .pokemon_serializer import PokemonAPISerializer, EvolutionChainSerializer
+from .pokemon_serializer import PokemonAPISerializer, EvolutionChainSerializer, TypeSerializer, AbilitySerializer
 import logging
 
 BASE_URL = "https://pokeapi.co/api/v2"
@@ -204,3 +204,29 @@ def fetch_pokemon_evolution_chain(name: str) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"Error processing evolution chain data: {str(e)}")
         return None
+
+
+def fetch_all_types() -> List[Dict[str, Any]]:
+    """Fetch all Pokémon types from the PokeAPI."""
+    try:
+        response = requests.get(f"{BASE_URL}/type")
+        response.raise_for_status()
+        data = response.json()
+        # Only return the names
+        return [{"name": type_data["name"]} for type_data in data["results"]]
+    except requests.RequestException as e:
+        print(f"Error fetching types: {e}")
+        return []
+
+
+def fetch_all_abilities() -> List[Dict[str, Any]]:
+    """Fetch all Pokémon abilities from the PokeAPI."""
+    try:
+        response = requests.get(f"{BASE_URL}/ability")
+        response.raise_for_status()
+        data = response.json()
+        # Only return the names
+        return [{"name": ability_data["name"]} for ability_data in data["results"]]
+    except requests.RequestException as e:
+        print(f"Error fetching abilities: {e}")
+        return []

@@ -16,7 +16,9 @@ from .api_integrations.pokemon.pokemon_api import (
     fetch_pokemon_by_ability,
     fetch_pokemon_detail,
     POKEMON_URL,
-    fetch_pokemon_evolution_chain
+    fetch_pokemon_evolution_chain,
+    fetch_all_types,
+    fetch_all_abilities
 )
 from .models import UserProfile
 from .decorators import handle_api_errors, require_authentication, validate_with_serializer, paginate_response
@@ -309,3 +311,33 @@ def pokemon_evolution_chain_view(request, name):
         )
     
     return Response(chain)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@handle_api_errors
+def types_list(request):
+    """Fetch all Pokémon types."""
+    try:
+        types = fetch_all_types()
+        return Response(types)
+    except Exception as e:
+        logger.error(f"Error fetching types: {str(e)}")
+        return Response(
+            {'error': 'Failed to fetch types.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@handle_api_errors
+def abilities_list(request):
+    """Fetch all Pokémon abilities."""
+    try:
+        abilities = fetch_all_abilities()
+        return Response(abilities)
+    except Exception as e:
+        logger.error(f"Error fetching abilities: {str(e)}")
+        return Response(
+            {'error': 'Failed to fetch abilities.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
