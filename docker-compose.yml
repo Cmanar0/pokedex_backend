@@ -21,4 +21,3 @@ services:
       - ../pokedex_frontend:/app
     ports:
       - "5173:5173"
-    command: npm run dev
