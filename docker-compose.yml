@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+    container_name: pokedex_backend
+    volumes:
+      - .:/app
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    command: python manage.py runserver 0.0.0.0:8000
+
+  frontend:
+    build:
+      context: ../pokedex_frontend
+    container_name: pokedex_frontend
+    working_dir: /app
+    volumes:
+      - ../pokedex_frontend:/app
+    ports:
+      - "5173:5173"
+    command: npm run dev
