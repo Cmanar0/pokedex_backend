@@ -38,4 +38,33 @@ class PokemonAPISerializer(serializers.Serializer):
             'abilities': [a['ability']['name'] for a in data.get('abilities', [])],
             'height': data.get('height'),
             'weight': data.get('weight'),
-        } 
+        }
+
+
+class EvolutionChainSerializer(serializers.Serializer):
+    """
+    Serializer for Pokemon evolution chain data from the PokeAPI.
+    This ensures the evolution chain data matches our expected structure.
+    """
+    species = serializers.DictField(required=True)
+    evolves_to = serializers.ListField(required=True)
+
+    def to_internal_value(self, data):
+        """
+        Transform the raw evolution chain data into our expected format.
+        """
+        if not data:
+            return {
+                'name': None,
+                'evolves_to': []
+            }
+
+        def parse_chain(chain_node):
+            species = chain_node['species']['name']
+            evolves_to = chain_node['evolves_to']
+            return {
+                'name': species,
+                'evolves_to': [parse_chain(evo) for evo in evolves_to] if evolves_to else []
+            }
+
+        return parse_chain(data) 

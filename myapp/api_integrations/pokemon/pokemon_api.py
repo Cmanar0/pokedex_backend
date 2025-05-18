@@ -2,7 +2,7 @@ import requests
 import concurrent.futures
 from typing import List, Dict, Optional
 from django.core.cache import cache
-from .pokemon_serializer import PokemonAPISerializer
+from .pokemon_serializer import PokemonAPISerializer, EvolutionChainSerializer
 import logging
 
 BASE_URL = "https://pokeapi.co/api/v2"
@@ -191,15 +191,16 @@ def fetch_pokemon_evolution_chain(name: str) -> Optional[Dict]:
         logger.error(f"Failed to fetch evolution chain for {name}")
         return None
 
-    def parse_chain(chain_node):
-        species = chain_node['species']['name']
-        evolves_to = chain_node['evolves_to']
-        return {
-            'name': species,
-            'evolves_to': [parse_chain(evo) for evo in evolves_to] if evolves_to else []
-        }
-
-    result = parse_chain(evolution_data['chain'])
-    cache.set(cache_key, result, DETAIL_CACHE_TIMEOUT)
-    logger.info(f"Cached evolution chain for {name}")
-    return result
+    try:
+        serializer = EvolutionChainSerializer(data=evolution_data['chain'])
+        if not serializer.is_valid():
+            logger.error(f"Serializer validation failed for evolution chain: {serializer.errors}")
+            return None
+        
+        result = serializer.to_internal_value(evolution_data['chain'])
+        cache.set(cache_key, result, DETAIL_CACHE_TIMEOUT)
+        logger.info(f"Cached evolution chain for {name}")
+        return result
+    except Exception as e:
+        logger.error(f"Error processing evolution chain data: {str(e)}")
+        return None
